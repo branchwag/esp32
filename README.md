@@ -23,12 +23,14 @@ If pacman warns that `rust` and `rustup` conflict, remove `rust` — `rustup` wi
 
 ### One-time udev rule (so dfu-util doesn't need sudo)
 
+Grants access to Arduino (`2341`) and Espressif (`303a`) USB devices for members of the `uucp` group, which is Arch's conventional group for serial/USB device access. Confirm you're in `uucp` with `groups`; if not, add yourself with `sudo gpasswd -a $USER uucp` and log out/in.
+
 ```sh
 sudo tee /etc/udev/rules.d/99-esp32.rules > /dev/null <<'EOF'
-SUBSYSTEM=="usb", ATTRS{idVendor}=="2341", MODE="0666"
-SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", MODE="0666"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="2341", MODE="0666"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", MODE="0666"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2341", MODE="0660", GROUP="uucp"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="303a", MODE="0660", GROUP="uucp"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2341", MODE="0660", GROUP="uucp"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", MODE="0660", GROUP="uucp"
 EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
@@ -54,7 +56,7 @@ dfu-util --device 2341:0070 --alt 0 --download target/app.bin --reset
 
 The blue element of the onboard RGB LED will blink on/off every half second.
 
-### Known limitation
+### Persistence across power cycles
 
-The Arduino bootloader doesn't recognize esp-hal apps as valid boot targets, so on every power cycle the board returns to DFU mode (rainbow LED cycle) and the app must be re-flashed. Replacing the bootloader to fix this would require UART access via the test pads on the underside of the board.
+The Arduino bootloader uses ESP-IDF's OTA (Over-The-Air update) scheme, which boots a freshly-flashed app in a "pending verification" state and rolls it back on the next power cycle unless the app explicitly marks itself valid. To survive power cycles, our `main.rs` calls `OtaUpdater::set_current_ota_state(OtaImageState::Valid)` early in boot. Without this call the board would revert to DFU mode (rainbow LED cycle) on every power-up and require re-flashing.
 
